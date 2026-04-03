@@ -200,4 +200,4 @@ The most impactful way to contribute is adding to the **enrichment map** — the
 
 ## License
 
-MIT
+Apache License 2.0
