@@ -1,0 +1,49 @@
+{
+  "name": "agentarmor",
+  "version": "0.1.0",
+  "description": "Security scanner for AI agents. Scans your agent installation, checks it against the official security documentation, and gives you a score out of 100.",
+  "type": "module",
+  "bin": {
+    "agentarmor": "./bin/agentarmor.mjs"
+  },
+  "main": "./dist/entry.js",
+  "files": [
+    "bin",
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsx src/entry.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "lint": "tsc --noEmit"
+  },
+  "keywords": [
+    "security",
+    "ai-agents",
+    "openclaw",
+    "scanner",
+    "audit",
+    "hardening"
+  ],
+  "author": "Shiva <nagask@me.com>",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "chalk": "^5.4.1",
+    "commander": "^13.1.0",
+    "json5": "^2.2.3",
+    "ora": "^8.2.0",
+    "zod": "^3.24.4"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "tsdown": "^0.12.5",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.1"
+  }
+}

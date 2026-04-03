@@ -1,0 +1,66 @@
+{
+  "ts": 1775174400000,
+  "summary": {
+    "critical": 4,
+    "warn": 3,
+    "info": 2
+  },
+  "findings": [
+    {
+      "checkId": "gateway.bind_no_auth",
+      "severity": "critical",
+      "title": "Gateway binds beyond loopback without authentication",
+      "detail": "Gateway bind is set to \"lan\" but no authentication is configured.",
+      "remediation": "Set gateway.auth.mode to \"token\" or change gateway.bind to \"loopback\""
+    },
+    {
+      "checkId": "gateway.control_ui.insecure_auth",
+      "severity": "critical",
+      "title": "Control UI allows insecure HTTP authentication",
+      "detail": "The Control UI accepts authentication over unencrypted HTTP connections."
+    },
+    {
+      "checkId": "browser.control_no_auth",
+      "severity": "critical",
+      "title": "Browser control endpoints have no authentication",
+      "detail": "Browser control is enabled but no authentication method is configured."
+    },
+    {
+      "checkId": "channels.discord.dm.open",
+      "severity": "critical",
+      "title": "Discord DMs are open to anyone",
+      "detail": "Any Discord user can send direct messages to your agent."
+    },
+    {
+      "checkId": "gateway.token_too_short",
+      "severity": "warn",
+      "title": "Gateway token is too short",
+      "detail": "The gateway token is shorter than the recommended 24 characters."
+    },
+    {
+      "checkId": "hooks.token_too_short",
+      "severity": "warn",
+      "title": "Hooks token is too short",
+      "detail": "The hooks token is shorter than 24 characters."
+    },
+    {
+      "checkId": "logging.redact_off",
+      "severity": "warn",
+      "title": "Tool output redaction is disabled",
+      "detail": "Sensitive data in tool outputs will be logged without redaction.",
+      "remediation": "Set logging.redactSensitive to \"tools\""
+    },
+    {
+      "checkId": "summary.attack_surface",
+      "severity": "info",
+      "title": "Attack surface summary",
+      "detail": "2 open groups, 3 elevated tools, 1 webhook, browser control enabled"
+    },
+    {
+      "checkId": "gateway.tailscale_serve",
+      "severity": "info",
+      "title": "Tailscale Serve is enabled",
+      "detail": "Agent is accessible via Tailscale Serve (tailnet-only)."
+    }
+  ]
+}
