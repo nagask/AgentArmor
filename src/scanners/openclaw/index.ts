@@ -7,7 +7,7 @@ import type {
   ScanResult,
 } from "../../core/types.js";
 import { detectOpenClaw } from "./detector.js";
-import { runCliAudit, runCliSecrets, runCliSandbox } from "./cli-runner.js";
+import { runCliAudit } from "./cli-runner.js";
 import { readConfig, runConfigChecks } from "./config-reader.js";
 import { normalizeFindings } from "./normalizer.js";
 import { computeScore } from "../../core/scorer.js";
@@ -35,17 +35,11 @@ export class OpenClawScanner implements AgentScanner {
     }
 
     const warnings: string[] = [];
-    const cliFindings: Array<{
-      checkId: string;
-      severity: string;
-      title: string;
-      detail: string;
-      remediation?: string;
-    }> = [];
+    let cliFindings: Finding[] = [];
     let cliChecksRun = 0;
     const timeout = options.timeout ?? 30_000;
 
-    // Layer 1: Exec CLI commands (primary)
+    // Layer 1: Exec openclaw security audit --json (primary)
     if (this.detection.binaryPath) {
       try {
         const auditResult = await runCliAudit(
@@ -53,52 +47,18 @@ export class OpenClawScanner implements AgentScanner {
           options.deep ?? false,
           timeout
         );
-        cliFindings.push(...auditResult.findings);
-        // Checks run = findings + passing checks (estimate from summary)
+        cliFindings = normalizeFindings(auditResult.findings, "cli", warnings);
         cliChecksRun = auditResult.checksRun;
       } catch (err) {
         warnings.push(
           `openclaw security audit failed: ${err instanceof Error ? err.message : String(err)}. Running config-only scan.`
         );
       }
-
-      try {
-        const secretsResult = await runCliSecrets(
-          this.detection.binaryPath,
-          timeout
-        );
-        cliFindings.push(...secretsResult.findings);
-        cliChecksRun += secretsResult.findings.length > 0 ? secretsResult.findings.length : 1;
-      } catch (err) {
-        if (cliChecksRun > 0) {
-          warnings.push(
-            `openclaw secrets audit failed: ${err instanceof Error ? err.message : String(err)}`
-          );
-        }
-      }
-
-      try {
-        const sandboxResult = await runCliSandbox(
-          this.detection.binaryPath,
-          timeout
-        );
-        cliFindings.push(...sandboxResult.findings);
-        cliChecksRun += sandboxResult.findings.length > 0 ? sandboxResult.findings.length : 1;
-      } catch (err) {
-        if (cliChecksRun > 0) {
-          warnings.push(
-            `openclaw sandbox explain failed: ${err instanceof Error ? err.message : String(err)}`
-          );
-        }
-      }
     } else {
       warnings.push(
         "OpenClaw binary not found in PATH. Running config-only scan."
       );
     }
-
-    // Normalize CLI findings with correct provenance
-    const enrichedCliFindings = normalizeFindings(cliFindings, "cli", warnings);
 
     // Layer 2: Config fallback (supplement or primary if CLI unavailable)
     let configFindings: Finding[] = [];
@@ -109,7 +69,6 @@ export class OpenClawScanner implements AgentScanner {
         const configResult = runConfigChecks(config);
         configChecksRun = configResult.checksRun;
 
-        // Normalize config findings with correct provenance
         const enrichedConfigFindings = normalizeFindings(
           configResult.findings,
           "config",
@@ -117,7 +76,7 @@ export class OpenClawScanner implements AgentScanner {
         );
 
         // Only add config findings that don't duplicate CLI findings
-        const cliCheckIds = new Set(enrichedCliFindings.map((f) => f.checkId));
+        const cliCheckIds = new Set(cliFindings.map((f) => f.checkId));
         configFindings = enrichedConfigFindings.filter(
           (f) => !cliCheckIds.has(f.checkId)
         );
@@ -129,16 +88,16 @@ export class OpenClawScanner implements AgentScanner {
     }
 
     // Merge findings
-    const allFindings = [...enrichedCliFindings, ...configFindings];
+    const allFindings = [...cliFindings, ...configFindings];
 
     // Filter by category if requested
     const filteredFindings = options.categories
       ? allFindings.filter((f) => options.categories!.includes(f.category))
       : allFindings;
 
-    // Total checks run (CLI + non-duplicate config checks)
+    // Total checks run
     const checksRun = cliChecksRun > 0
-      ? cliChecksRun + Math.max(0, configChecksRun - enrichedCliFindings.length)
+      ? cliChecksRun + Math.max(0, configChecksRun - cliFindings.length)
       : configChecksRun;
 
     // Score
@@ -154,7 +113,11 @@ export class OpenClawScanner implements AgentScanner {
     };
   }
 
-  async fix(findings: Finding[], dryRun: boolean): Promise<FixResult[]> {
+  async fix(_findings: Finding[], dryRun: boolean): Promise<FixResult[]> {
+    if (!this.detection) {
+      this.detection = await detectOpenClaw();
+    }
+
     if (!this.detection?.binaryPath) {
       return [
         {

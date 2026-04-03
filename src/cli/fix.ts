@@ -18,10 +18,8 @@ export async function fixCommand(opts: {
     return;
   }
 
-  // Note: OpenClaw's --fix is all-or-nothing. Per-check filtering requires
-  // upstream support. For now we apply all safe fixes together.
-  const result = await scanner.scan({ verbose: false });
-  const fixResults = await scanner.fix(result.findings, opts.dryRun ?? false);
+  // Run fix directly — no scan needed. OpenClaw's --fix handles everything.
+  const fixResults = await scanner.fix([], opts.dryRun ?? false);
 
   for (const r of fixResults) {
     const prefix = opts.dryRun ? "[DRY RUN]" : r.applied ? "[FIXED]" : "[SKIP]";

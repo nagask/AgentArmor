@@ -41,44 +41,29 @@ export function createProgram(): Command {
 }
 
 async function explainCommand(checkId: string): Promise<void> {
-  const { getRegistry } = await import("../scanners/registry.js");
-  const registry = getRegistry();
-  const scanner = await registry.detectScanner();
+  // Use the enrichment map directly — no scan needed, instant response
+  const { getEnrichment } = await import(
+    "../scanners/openclaw/enrichment-map.js"
+  );
+  const { CATEGORY_LABELS } = await import("../core/types.js");
 
-  if (!scanner) {
-    process.stderr.write("No supported agent detected.\n");
-    process.exit(1);
-  }
-
-  const result = await scanner.scan({ verbose: false });
-  const finding = result.findings.find((f) => f.checkId === checkId);
-
-  if (!finding) {
-    process.stderr.write(`No finding with checkId "${checkId}".\n`);
-    process.stderr.write(
-      "Run 'agentarmor scan' to see all findings and their checkIds.\n"
-    );
-    process.exit(1);
-  }
+  const enrichment = getEnrichment(checkId);
+  const isKnown = enrichment.blastRadius.includes("doesn't have detailed context") === false;
 
   const out = process.stdout;
   out.write("\n");
-  out.write(`  ${finding.title}\n`);
-  out.write(`  Check ID: ${finding.checkId}\n`);
-  out.write(`  Severity: ${finding.severity.toUpperCase()}\n`);
-  out.write(`  Category: ${finding.category}\n`);
-  if (finding.atlasId) {
-    out.write(`  MITRE ATLAS: ${finding.atlasId}\n`);
+  out.write(`  Check ID: ${checkId}\n`);
+  out.write(`  Category: ${CATEGORY_LABELS[enrichment.category]} (${enrichment.category})\n`);
+  if (enrichment.atlasId) {
+    out.write(`  MITRE ATLAS: ${enrichment.atlasId}\n`);
   }
   out.write("\n");
-  out.write(`  ${finding.detail}\n`);
-  out.write("\n");
   out.write(`  Blast Radius:\n`);
-  out.write(`  ${finding.blastRadius}\n`);
-  if (finding.remediation) {
+  out.write(`  ${enrichment.blastRadius}\n`);
+  if (!isKnown) {
     out.write("\n");
-    out.write(`  Fix:\n`);
-    out.write(`  ${finding.remediation}\n`);
+    out.write(`  This checkId is not in AgentArmor's enrichment map yet.\n`);
+    out.write(`  Run 'openclaw security audit' for the raw finding details.\n`);
   }
   out.write("\n");
 }

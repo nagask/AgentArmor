@@ -23,7 +23,8 @@ function execPromise(
   });
 }
 
-// Zod schemas for validating CLI JSON output
+// Zod schema for OpenClaw's security audit --json output
+// Uses passthrough() to tolerate extra/changed fields across versions
 
 const FindingSchema = z.object({
   checkId: z.string(),
@@ -31,7 +32,7 @@ const FindingSchema = z.object({
   title: z.string(),
   detail: z.string(),
   remediation: z.string().optional(),
-});
+}).passthrough();
 
 const AuditReportSchema = z.object({
   ts: z.number(),
@@ -39,29 +40,8 @@ const AuditReportSchema = z.object({
     critical: z.number(),
     warn: z.number(),
     info: z.number(),
-  }),
+  }).passthrough(),
   findings: z.array(FindingSchema),
-  deep: z
-    .object({
-      gateway: z
-        .object({
-          attempted: z.boolean(),
-          url: z.string().nullable(),
-          ok: z.boolean(),
-          error: z.string().nullable(),
-        })
-        .optional(),
-    })
-    .optional(),
-});
-
-const SecretsReportSchema = z.object({
-  ts: z.number().optional(),
-  findings: z.array(FindingSchema),
-});
-
-const SandboxExplainSchema = z.object({
-  findings: z.array(FindingSchema).optional(),
 }).passthrough();
 
 export type RawFinding = z.infer<typeof FindingSchema>;
@@ -69,15 +49,6 @@ export type RawFinding = z.infer<typeof FindingSchema>;
 export interface CliAuditResult {
   findings: RawFinding[];
   checksRun: number;
-  deep?: { gateway?: { attempted: boolean; ok: boolean } };
-}
-
-export interface CliSecretsResult {
-  findings: RawFinding[];
-}
-
-export interface CliSandboxResult {
-  findings: RawFinding[];
 }
 
 export async function runCliAudit(
@@ -92,57 +63,15 @@ export async function runCliAudit(
   const parsed = JSON.parse(stdout);
   const validated = AuditReportSchema.parse(parsed);
 
-  // checksRun = total findings + estimated passing checks
-  // The summary counts all findings; passing checks don't appear in findings
-  // Use summary total as a floor, add an estimate for checks that passed
+  // checksRun = findings count + estimated passing checks (~10 pass silently)
   const summaryTotal =
     validated.summary.critical + validated.summary.warn + validated.summary.info;
-  const checksRun = Math.max(summaryTotal, validated.findings.length) + 10; // ~10 checks typically pass silently
+  const checksRun = Math.max(summaryTotal, validated.findings.length) + 10;
 
   return {
     findings: validated.findings,
     checksRun,
-    deep: validated.deep
-      ? {
-          gateway: validated.deep.gateway
-            ? {
-                attempted: validated.deep.gateway.attempted,
-                ok: validated.deep.gateway.ok,
-              }
-            : undefined,
-        }
-      : undefined,
   };
-}
-
-export async function runCliSecrets(
-  binaryPath: string,
-  timeout: number
-): Promise<CliSecretsResult> {
-  const args = ["secrets", "audit", "--json"];
-
-  const { stdout } = await execPromise(binaryPath, args, timeout);
-  const parsed = JSON.parse(stdout);
-  const validated = SecretsReportSchema.parse(parsed);
-
-  return { findings: validated.findings };
-}
-
-export async function runCliSandbox(
-  binaryPath: string,
-  timeout: number
-): Promise<CliSandboxResult> {
-  const args = ["sandbox", "explain", "--json"];
-
-  try {
-    const { stdout } = await execPromise(binaryPath, args, timeout);
-    const parsed = JSON.parse(stdout);
-    const validated = SandboxExplainSchema.parse(parsed);
-    return { findings: validated.findings ?? [] };
-  } catch {
-    // sandbox explain may not emit findings in all versions
-    return { findings: [] };
-  }
 }
 
 export async function runCliFix(
