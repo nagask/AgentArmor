@@ -67,6 +67,9 @@ export interface ScanResult {
   score: number;
   coverage: number;
   grade: string;
+  gradeCapped: boolean;
+  gradeCappedReason?: string;
+  blockers: number;
   categories: CategoryScore[];
   findings: Finding[];
   warnings: string[];

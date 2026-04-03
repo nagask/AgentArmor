@@ -10,7 +10,7 @@ export function createProgram(): Command {
     .description(
       "Security scanner for AI agents. Scans your agent installation, checks it against the official security documentation, and gives you a score out of 100."
     )
-    .version("0.1.0");
+    .version("0.1.1");
 
   program
     .command("scan")
@@ -30,7 +30,6 @@ export function createProgram(): Command {
     .command("fix")
     .description("Apply safe fixes for detected security issues")
     .option("--dry-run", "Show what would be fixed without applying changes")
-    .option("--check <checkId>", "Fix a specific check only")
     .action(fixCommand);
 
   program

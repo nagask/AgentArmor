@@ -17,10 +17,11 @@ function makeFinding(
 
 describe("computeScore", () => {
   it("returns 100 with zero findings", () => {
-    const result = computeScore([], true);
+    const result = computeScore([], 41);
     expect(result.score).toBe(100);
     expect(result.grade).toBe("A");
-    expect(result.coverage).toBe(100);
+    expect(result.gradeCapped).toBe(false);
+    expect(result.blockers).toBe(0);
   });
 
   it("deducts correctly for a single critical finding", () => {
@@ -31,10 +32,75 @@ describe("computeScore", () => {
         category: "gateway-exposure",
       }),
     ];
-    const result = computeScore(findings, true);
-    // critical deduction: 25 * 0.4 = 10
+    const result = computeScore(findings, 41);
+    // critical deduction: 25 * 0.4 = 10 → score 90
     expect(result.score).toBe(90);
-    expect(result.grade).toBe("A");
+  });
+
+  it("caps grade to D for critical in gateway-exposure", () => {
+    const findings: Finding[] = [
+      makeFinding({
+        checkId: "gateway.bind_no_auth",
+        severity: "critical",
+        category: "gateway-exposure",
+      }),
+    ];
+    const result = computeScore(findings, 41);
+    expect(result.grade).toBe("D");
+    expect(result.gradeCapped).toBe(true);
+    expect(result.gradeCappedReason).toContain("gateway-exposure");
+  });
+
+  it("caps grade to D for critical in sandbox-isolation", () => {
+    const findings: Finding[] = [
+      makeFinding({
+        checkId: "sandbox.missing",
+        severity: "critical",
+        category: "sandbox-isolation",
+      }),
+    ];
+    const result = computeScore(findings, 41);
+    expect(result.grade).toBe("D");
+    expect(result.gradeCapped).toBe(true);
+  });
+
+  it("caps grade to C for critical in non-high-severity category", () => {
+    const findings: Finding[] = [
+      makeFinding({
+        checkId: "hooks.path_root",
+        severity: "critical",
+        category: "hooks-webhooks",
+      }),
+    ];
+    const result = computeScore(findings, 41);
+    // hooks critical deduction: 3 * 0.4 = 1.2 → score 99
+    // But grade capped at C because of critical
+    expect(result.grade).toBe("C");
+    expect(result.gradeCapped).toBe(true);
+  });
+
+  it("caps grade to F for 3+ criticals", () => {
+    const findings: Finding[] = [
+      makeFinding({ checkId: "c1", severity: "critical", category: "hooks-webhooks" }),
+      makeFinding({ checkId: "c2", severity: "critical", category: "secrets" }),
+      makeFinding({ checkId: "c3", severity: "critical", category: "browser-control" }),
+    ];
+    const result = computeScore(findings, 41);
+    expect(result.grade).toBe("F");
+    expect(result.gradeCapped).toBe(true);
+    expect(result.blockers).toBe(3);
+  });
+
+  it("does not cap grade when no criticals", () => {
+    const findings: Finding[] = [
+      makeFinding({
+        checkId: "gateway.token_too_short",
+        severity: "warn",
+        category: "gateway-exposure",
+      }),
+    ];
+    const result = computeScore(findings, 41);
+    expect(result.gradeCapped).toBe(false);
   });
 
   it("deducts correctly for a single warn finding", () => {
@@ -45,52 +111,39 @@ describe("computeScore", () => {
         category: "gateway-exposure",
       }),
     ];
-    const result = computeScore(findings, true);
+    const result = computeScore(findings, 41);
     // warn deduction: 25 * 0.15 = 3.75, rounded
     expect(result.score).toBe(96);
   });
 
   it("caps deductions at category weight", () => {
-    // 4 critical findings in gateway (25% weight)
-    // 4 * 25 * 0.4 = 40, but capped at 25
     const findings: Finding[] = [
       makeFinding({ checkId: "gw1", severity: "critical", category: "gateway-exposure" }),
       makeFinding({ checkId: "gw2", severity: "critical", category: "gateway-exposure" }),
       makeFinding({ checkId: "gw3", severity: "critical", category: "gateway-exposure" }),
       makeFinding({ checkId: "gw4", severity: "critical", category: "gateway-exposure" }),
     ];
-    const result = computeScore(findings, true);
+    const result = computeScore(findings, 41);
     expect(result.score).toBe(75);
   });
 
   it("caps info deductions at 20% of category weight", () => {
-    // 20 info findings in gateway (25% weight)
-    // 20 * 25 * 0.02 = 10, but info cap is 25 * 0.2 = 5
     const findings: Finding[] = Array.from({ length: 20 }, (_, i) =>
       makeFinding({ checkId: `info${i}`, severity: "info", category: "gateway-exposure" })
     );
-    const result = computeScore(findings, true);
+    const result = computeScore(findings, 41);
     expect(result.score).toBe(95);
   });
 
-  it("assigns correct grades", () => {
-    expect(computeScore([], true).grade).toBe("A");
-
-    // Score 75 = B (3 criticals in gateway = capped at 25)
-    const criticals = [
-      makeFinding({ checkId: "c1", severity: "critical", category: "gateway-exposure" }),
-      makeFinding({ checkId: "c2", severity: "critical", category: "gateway-exposure" }),
-      makeFinding({ checkId: "c3", severity: "critical", category: "gateway-exposure" }),
-    ];
-    expect(computeScore(criticals, true).grade).toBe("B");
-  });
-
-  it("computes coverage based on CLI availability", () => {
-    const result = computeScore([], true);
+  it("computes coverage based on checksRun", () => {
+    const result = computeScore([], 41);
     expect(result.coverage).toBe(100);
 
-    const resultNoCliNoFindings = computeScore([], false);
-    expect(resultNoCliNoFindings.coverage).toBe(0);
+    const partialResult = computeScore([], 18);
+    expect(partialResult.coverage).toBe(44); // 18/41 ≈ 44%
+
+    const configOnly = computeScore([], 7);
+    expect(configOnly.coverage).toBe(17); // 7/41 ≈ 17%
   });
 
   it("scores multiple categories independently", () => {
@@ -99,7 +152,7 @@ describe("computeScore", () => {
       makeFinding({ checkId: "sec1", severity: "warn", category: "secrets" }),
       makeFinding({ checkId: "perm1", severity: "warn", category: "permissions" }),
     ];
-    const result = computeScore(findings, true);
+    const result = computeScore(findings, 41);
 
     const gw = result.categories.find((c) => c.category === "gateway-exposure")!;
     expect(gw.deducted).toBe(10); // 25 * 0.4

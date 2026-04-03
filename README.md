@@ -2,7 +2,7 @@
 
 Security scanner for AI agents. One command. A score out of 100. Plain-English explanations of what's wrong and how to fix it.
 
-Currently supports [OpenClaw](https://github.com/openclaw/openclaw). Pluggable architecture makes it easy to add more agent types.
+Currently supports [OpenClaw](https://github.com/openclaw/openclaw). Designed to support more agent types.
 
 ## Why
 
@@ -23,7 +23,7 @@ That's it. AgentArmor auto-detects your OpenClaw installation and scans it.
 ```
 AgentArmor v0.1.0 — openclaw v2026.2.13
 
-Score: 62/100 (C — Needs Attention)
+Score: 62/100 (D — Significant Risk) [capped: critical finding in gateway-exposure]
 
   Gateway Exposure     ................ 5/25  [2 critical]
   Sandbox Isolation    ............... 20/20
@@ -155,6 +155,8 @@ AgentArmor starts at 100 and deducts points based on findings. Each finding belo
 Weights are calibrated against OpenClaw's [MITRE ATLAS threat model](https://docs.openclaw.ai/security/THREAT-MODEL-ATLAS) and real CVE history.
 
 **Grades:** A (90-100) · B (75-89) · C (60-74) · D (40-59) · F (0-39)
+
+**Grade caps:** Critical findings cap the grade regardless of numeric score. Any critical caps at C. A critical in gateway exposure or sandbox isolation caps at D. Three or more criticals cap at F. A security tool that gives you an A while your gateway is wide open would be lying.
 
 ## How It Works
 

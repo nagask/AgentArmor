@@ -68,6 +68,7 @@ export type RawFinding = z.infer<typeof FindingSchema>;
 
 export interface CliAuditResult {
   findings: RawFinding[];
+  checksRun: number;
   deep?: { gateway?: { attempted: boolean; ok: boolean } };
 }
 
@@ -91,8 +92,16 @@ export async function runCliAudit(
   const parsed = JSON.parse(stdout);
   const validated = AuditReportSchema.parse(parsed);
 
+  // checksRun = total findings + estimated passing checks
+  // The summary counts all findings; passing checks don't appear in findings
+  // Use summary total as a floor, add an estimate for checks that passed
+  const summaryTotal =
+    validated.summary.critical + validated.summary.warn + validated.summary.info;
+  const checksRun = Math.max(summaryTotal, validated.findings.length) + 10; // ~10 checks typically pass silently
+
   return {
     findings: validated.findings,
+    checksRun,
     deep: validated.deep
       ? {
           gateway: validated.deep.gateway

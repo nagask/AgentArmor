@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { normalizeFindings } from "../../../src/scanners/openclaw/normalizer.js";
 
 describe("normalizeFindings", () => {
-  it("normalizes raw findings into enriched findings", () => {
+  it("normalizes raw findings into enriched findings with correct source", () => {
     const warnings: string[] = [];
     const findings = normalizeFindings(
       [
@@ -14,6 +14,7 @@ describe("normalizeFindings", () => {
           remediation: "Fix it",
         },
       ],
+      "cli",
       warnings
     );
 
@@ -23,6 +24,24 @@ describe("normalizeFindings", () => {
     expect(findings[0].atlasId).toBe("T-ACCESS-001");
     expect(findings[0].source).toBe("cli");
     expect(warnings).toHaveLength(0);
+  });
+
+  it("labels config findings with source 'config'", () => {
+    const warnings: string[] = [];
+    const findings = normalizeFindings(
+      [
+        {
+          checkId: "gateway.bind_no_auth",
+          severity: "critical",
+          title: "Gateway binds beyond loopback",
+          detail: "From config",
+        },
+      ],
+      "config",
+      warnings
+    );
+
+    expect(findings[0].source).toBe("config");
   });
 
   it("deduplicates by checkId (first wins)", () => {
@@ -42,6 +61,7 @@ describe("normalizeFindings", () => {
           detail: "Config version",
         },
       ],
+      "cli",
       warnings
     );
 
@@ -60,6 +80,7 @@ describe("normalizeFindings", () => {
           detail: "Test",
         },
       ],
+      "cli",
       warnings
     );
 
@@ -70,7 +91,7 @@ describe("normalizeFindings", () => {
 
   it("handles empty input", () => {
     const warnings: string[] = [];
-    const findings = normalizeFindings([], warnings);
+    const findings = normalizeFindings([], "cli", warnings);
     expect(findings).toHaveLength(0);
     expect(warnings).toHaveLength(0);
   });

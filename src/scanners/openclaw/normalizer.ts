@@ -11,13 +11,14 @@ export interface RawFinding {
 
 export function normalizeFindings(
   rawFindings: RawFinding[],
+  source: "cli" | "config",
   warnings: string[]
 ): Finding[] {
   const seen = new Set<string>();
   const findings: Finding[] = [];
 
   for (const raw of rawFindings) {
-    // Dedup by checkId — first occurrence wins (CLI over config)
+    // Dedup by checkId — first occurrence wins
     if (seen.has(raw.checkId)) continue;
     seen.add(raw.checkId);
 
@@ -41,7 +42,7 @@ export function normalizeFindings(
       remediation: raw.remediation,
       blastRadius: enrichment.blastRadius,
       atlasId: enrichment.atlasId,
-      source: "cli",
+      source,
     });
   }
 

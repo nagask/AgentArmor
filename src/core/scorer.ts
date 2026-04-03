@@ -1,11 +1,15 @@
 import type { Finding, CategoryScore, CheckCategory } from "./types.js";
 import { CATEGORY_WEIGHTS, CATEGORY_LABELS } from "./types.js";
-import { KNOWN_CHECK_COUNT } from "../scanners/openclaw/enrichment-map.js";
+
+const TOTAL_KNOWN_CHECKS = 41;
 
 interface ScoreResult {
   score: number;
   coverage: number;
   grade: string;
+  gradeCapped: boolean;
+  gradeCappedReason?: string;
+  blockers: number;
   categories: CategoryScore[];
 }
 
@@ -15,6 +19,11 @@ const SEVERITY_MULTIPLIERS = {
   info: 0.02,
 } as const;
 
+const HIGH_SEVERITY_CATEGORIES: CheckCategory[] = [
+  "gateway-exposure",
+  "sandbox-isolation",
+];
+
 function computeGrade(score: number): string {
   if (score >= 90) return "A";
   if (score >= 75) return "B";
@@ -23,9 +32,20 @@ function computeGrade(score: number): string {
   return "F";
 }
 
+function capGrade(
+  grade: string,
+  maxGrade: string
+): string {
+  const order = ["F", "D", "C", "B", "A"];
+  const gradeIdx = order.indexOf(grade);
+  const capIdx = order.indexOf(maxGrade);
+  if (gradeIdx > capIdx) return maxGrade;
+  return grade;
+}
+
 export function computeScore(
   findings: Finding[],
-  cliAvailable: boolean
+  checksRun: number
 ): ScoreResult {
   // Group findings by category
   const grouped = new Map<CheckCategory, Finding[]>();
@@ -44,12 +64,9 @@ export function computeScore(
   >) {
     const categoryFindings = grouped.get(category) ?? [];
     const counts = { critical: 0, warn: 0, info: 0 };
-    let deducted = 0;
 
     for (const f of categoryFindings) {
       counts[f.severity]++;
-      const multiplier = SEVERITY_MULTIPLIERS[f.severity];
-      deducted += weight * multiplier;
     }
 
     // Info deductions capped at 20% of category weight
@@ -57,12 +74,11 @@ export function computeScore(
     const infoCap = weight * 0.2;
     const cappedInfoDeduction = Math.min(infoDeduction, infoCap);
 
-    // Recalculate: critical + warn (uncapped within category) + capped info
     const critWarnDeduction =
       counts.critical * weight * SEVERITY_MULTIPLIERS.critical +
       counts.warn * weight * SEVERITY_MULTIPLIERS.warn;
 
-    deducted = Math.min(critWarnDeduction + cappedInfoDeduction, weight);
+    const deducted = Math.min(critWarnDeduction + cappedInfoDeduction, weight);
     totalDeducted += deducted;
 
     categories.push({
@@ -78,17 +94,51 @@ export function computeScore(
 
   const score = Math.max(0, Math.round(100 - totalDeducted));
 
-  // Coverage: estimate based on whether CLI was available
-  // CLI provides ~100% of checks; config-only provides ~30%
-  const uniqueCheckIds = new Set(findings.map((f) => f.checkId)).size;
-  const coverage = cliAvailable
-    ? 100
-    : Math.min(100, Math.round((uniqueCheckIds / KNOWN_CHECK_COUNT) * 100));
+  // Grade caps based on critical findings
+  const criticals = findings.filter((f) => f.severity === "critical");
+  const blockers = criticals.length;
+  let grade = computeGrade(score);
+  let gradeCapped = false;
+  let gradeCappedReason: string | undefined;
+
+  if (blockers >= 3) {
+    const capped = capGrade(grade, "F");
+    if (capped !== grade) {
+      gradeCapped = true;
+      gradeCappedReason = `${blockers} critical findings`;
+      grade = capped;
+    }
+  } else if (
+    criticals.some((f) => HIGH_SEVERITY_CATEGORIES.includes(f.category))
+  ) {
+    const capped = capGrade(grade, "D");
+    if (capped !== grade) {
+      gradeCapped = true;
+      gradeCappedReason = `critical finding in ${criticals.find((f) => HIGH_SEVERITY_CATEGORIES.includes(f.category))!.category}`;
+      grade = capped;
+    }
+  } else if (blockers > 0) {
+    const capped = capGrade(grade, "C");
+    if (capped !== grade) {
+      gradeCapped = true;
+      gradeCappedReason = `${blockers} critical finding${blockers > 1 ? "s" : ""}`;
+      grade = capped;
+    }
+  }
+
+  // Coverage based on checks actually run
+  const coverage = Math.min(
+    100,
+    Math.round((checksRun / TOTAL_KNOWN_CHECKS) * 100)
+  );
 
   return {
     score,
     coverage,
-    grade: computeGrade(score),
+    grade,
+    gradeCapped,
+    gradeCappedReason,
+    blockers,
     categories,
   };
 }

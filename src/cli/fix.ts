@@ -2,7 +2,6 @@ import { getRegistry } from "../scanners/registry.js";
 
 export async function fixCommand(opts: {
   dryRun?: boolean;
-  check?: string;
 }): Promise<void> {
   const registry = getRegistry();
   const scanner = await registry.detectScanner();
@@ -10,7 +9,7 @@ export async function fixCommand(opts: {
   if (!scanner) {
     process.stderr.write("No supported agent detected.\n");
     process.exit(1);
-    return; // unreachable, helps TS narrow
+    return;
   }
 
   if (!scanner.fix) {
@@ -19,19 +18,10 @@ export async function fixCommand(opts: {
     return;
   }
 
+  // Note: OpenClaw's --fix is all-or-nothing. Per-check filtering requires
+  // upstream support. For now we apply all safe fixes together.
   const result = await scanner.scan({ verbose: false });
-  let findings = result.findings;
-
-  if (opts.check) {
-    findings = findings.filter((f) => f.checkId === opts.check);
-    if (findings.length === 0) {
-      process.stderr.write(`No finding with checkId "${opts.check}".\n`);
-      process.exit(1);
-      return;
-    }
-  }
-
-  const fixResults = await scanner.fix(findings, opts.dryRun ?? false);
+  const fixResults = await scanner.fix(result.findings, opts.dryRun ?? false);
 
   for (const r of fixResults) {
     const prefix = opts.dryRun ? "[DRY RUN]" : r.applied ? "[FIXED]" : "[SKIP]";

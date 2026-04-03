@@ -35,14 +35,14 @@ export class OpenClawScanner implements AgentScanner {
     }
 
     const warnings: string[] = [];
-    const allRawFindings: Array<{
+    const cliFindings: Array<{
       checkId: string;
       severity: string;
       title: string;
       detail: string;
       remediation?: string;
     }> = [];
-    let cliAvailable = false;
+    let cliChecksRun = 0;
     const timeout = options.timeout ?? 30_000;
 
     // Layer 1: Exec CLI commands (primary)
@@ -53,8 +53,9 @@ export class OpenClawScanner implements AgentScanner {
           options.deep ?? false,
           timeout
         );
-        allRawFindings.push(...auditResult.findings);
-        cliAvailable = true;
+        cliFindings.push(...auditResult.findings);
+        // Checks run = findings + passing checks (estimate from summary)
+        cliChecksRun = auditResult.checksRun;
       } catch (err) {
         warnings.push(
           `openclaw security audit failed: ${err instanceof Error ? err.message : String(err)}. Running config-only scan.`
@@ -66,9 +67,10 @@ export class OpenClawScanner implements AgentScanner {
           this.detection.binaryPath,
           timeout
         );
-        allRawFindings.push(...secretsResult.findings);
+        cliFindings.push(...secretsResult.findings);
+        cliChecksRun += secretsResult.findings.length > 0 ? secretsResult.findings.length : 1;
       } catch (err) {
-        if (cliAvailable) {
+        if (cliChecksRun > 0) {
           warnings.push(
             `openclaw secrets audit failed: ${err instanceof Error ? err.message : String(err)}`
           );
@@ -80,9 +82,10 @@ export class OpenClawScanner implements AgentScanner {
           this.detection.binaryPath,
           timeout
         );
-        allRawFindings.push(...sandboxResult.findings);
+        cliFindings.push(...sandboxResult.findings);
+        cliChecksRun += sandboxResult.findings.length > 0 ? sandboxResult.findings.length : 1;
       } catch (err) {
-        if (cliAvailable) {
+        if (cliChecksRun > 0) {
           warnings.push(
             `openclaw sandbox explain failed: ${err instanceof Error ? err.message : String(err)}`
           );
@@ -94,18 +97,30 @@ export class OpenClawScanner implements AgentScanner {
       );
     }
 
+    // Normalize CLI findings with correct provenance
+    const enrichedCliFindings = normalizeFindings(cliFindings, "cli", warnings);
+
     // Layer 2: Config fallback (supplement or primary if CLI unavailable)
+    let configFindings: Finding[] = [];
+    let configChecksRun = 0;
     if (this.detection.configPath) {
       try {
         const config = await readConfig(this.detection.configPath);
-        const configFindings = runConfigChecks(config);
+        const configResult = runConfigChecks(config);
+        configChecksRun = configResult.checksRun;
+
+        // Normalize config findings with correct provenance
+        const enrichedConfigFindings = normalizeFindings(
+          configResult.findings,
+          "config",
+          warnings
+        );
+
         // Only add config findings that don't duplicate CLI findings
-        const cliCheckIds = new Set(allRawFindings.map((f) => f.checkId));
-        for (const cf of configFindings) {
-          if (!cliCheckIds.has(cf.checkId)) {
-            allRawFindings.push(cf);
-          }
-        }
+        const cliCheckIds = new Set(enrichedCliFindings.map((f) => f.checkId));
+        configFindings = enrichedConfigFindings.filter(
+          (f) => !cliCheckIds.has(f.checkId)
+        );
       } catch (err) {
         warnings.push(
           `Config parsing failed: ${err instanceof Error ? err.message : String(err)}`
@@ -113,28 +128,27 @@ export class OpenClawScanner implements AgentScanner {
       }
     }
 
-    // Normalize + enrich
-    const findings = normalizeFindings(allRawFindings, warnings);
+    // Merge findings
+    const allFindings = [...enrichedCliFindings, ...configFindings];
 
     // Filter by category if requested
     const filteredFindings = options.categories
-      ? findings.filter((f) => options.categories!.includes(f.category))
-      : findings;
+      ? allFindings.filter((f) => options.categories!.includes(f.category))
+      : allFindings;
+
+    // Total checks run (CLI + non-duplicate config checks)
+    const checksRun = cliChecksRun > 0
+      ? cliChecksRun + Math.max(0, configChecksRun - enrichedCliFindings.length)
+      : configChecksRun;
 
     // Score
-    const { score, coverage, grade, categories } = computeScore(
-      filteredFindings,
-      cliAvailable
-    );
+    const scoreResult = computeScore(filteredFindings, checksRun);
 
     return {
       agent: this.id,
       version: this.detection.version ?? "unknown",
       timestamp: Date.now(),
-      score,
-      coverage,
-      grade,
-      categories,
+      ...scoreResult,
       findings: filteredFindings,
       warnings,
     };

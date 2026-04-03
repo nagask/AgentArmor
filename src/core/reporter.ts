@@ -97,7 +97,7 @@ export function renderTerminal(
   // Header
   out.write("\n");
   out.write(
-    chalk.bold(`  AgentArmor v0.1.0`) +
+    chalk.bold(`  AgentArmor v0.1.1`) +
       chalk.dim(` — ${result.agent} v${result.version}`) +
       "\n"
   );
@@ -108,8 +108,11 @@ export function renderTerminal(
     result.coverage < 100
       ? chalk.dim(` (${result.coverage}% coverage)`)
       : "";
+  const cappedStr = result.gradeCapped
+    ? chalk.red(` [capped: ${result.gradeCappedReason}]`)
+    : "";
   out.write(
-    `  Score: ${color(chalk.bold(`${result.score}/100`))} ${color(`(${result.grade} — ${gradeLabel(result.grade)})`)}${coverageStr}\n`
+    `  Score: ${color(chalk.bold(`${result.score}/100`))} ${color(`(${result.grade} — ${gradeLabel(result.grade)})`)}${cappedStr}${coverageStr}\n`
   );
   out.write("\n");
 

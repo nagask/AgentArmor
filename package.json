@@ -1,6 +1,6 @@
 {
   "name": "agentarmor",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Security scanner for AI agents. Scans your agent installation, checks it against the official security documentation, and gives you a score out of 100.",
   "type": "module",
   "bin": {
