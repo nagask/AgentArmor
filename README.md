@@ -13,7 +13,7 @@ OpenClaw has solid security primitives built in, but they're scattered across mu
 ## Quick Start
 
 ```
-npx agentarmor scan
+npx agentarmor-cli scan
 ```
 
 That's it. AgentArmor auto-detects your OpenClaw installation and scans it.
@@ -70,10 +70,10 @@ Every finding tells you three things:
 
 ```bash
 # Run without installing
-npx agentarmor scan
+npx agentarmor-cli scan
 
 # Or install globally
-npm install -g agentarmor
+npm install -g agentarmor-cli
 ```
 
 Requires Node.js 18+.
@@ -178,7 +178,7 @@ If the OpenClaw CLI isn't available, AgentArmor falls back to reading `~/.opencl
 ```yaml
 # GitHub Actions
 - name: Security scan
-  run: npx agentarmor scan --fail-below 70 --json
+  run: npx agentarmor-cli scan --fail-below 70 --json
 ```
 
 Exit codes:

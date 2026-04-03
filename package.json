@@ -1,10 +1,10 @@
 {
-  "name": "agentarmor",
+  "name": "agentarmor-cli",
   "version": "0.1.1",
   "description": "Security scanner for AI agents. Scans your agent installation, checks it against the official security documentation, and gives you a score out of 100.",
   "type": "module",
   "bin": {
-    "agentarmor": "./bin/agentarmor.mjs"
+    "agentarmor": "bin/agentarmor.mjs"
   },
   "main": "./dist/entry.js",
   "files": [
