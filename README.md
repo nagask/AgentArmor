@@ -194,7 +194,7 @@ agentarmor scan --json | jq .score
 
 ## Contributing
 
-AgentArmor is open source under the MIT license. Contributions welcome.
+AgentArmor is open source under the Apache License 2.0. Contributions welcome.
 
 The most impactful way to contribute is adding to the **enrichment map** — the file that maps OpenClaw check IDs to blast radius descriptions and MITRE ATLAS references. See `src/scanners/openclaw/enrichment-map.ts`.
 
